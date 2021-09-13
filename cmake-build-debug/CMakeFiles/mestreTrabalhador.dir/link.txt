@@ -1,0 +1,1 @@
+/usr/bin/cc  -lpthread -O3 -g CMakeFiles/mestreTrabalhador.dir/sum.c.o CMakeFiles/mestreTrabalhador.dir/main.c.o -o mestreTrabalhador 

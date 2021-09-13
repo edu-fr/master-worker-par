@@ -1,0 +1,28 @@
+#IncludeRegexLine: ^[ 	]*[#%][ 	]*(include|import)[ 	]*[<"]([^">]+)([">])
+
+#IncludeRegexScan: ^.*$
+
+#IncludeRegexComplain: ^$
+
+#IncludeRegexTransform: 
+
+/home/eduardo/Documentos/Facul/ProgramacaoConcorrente/Atividades/mestreTrabalhador/par_sum.c
+stdio.h
+-
+unistd.h
+-
+pthread.h
+-
+stdlib.h
+-
+string.h
+-
+errno.h
+-
+math.h
+-
+stdbool.h
+-
+limits.h
+-
+

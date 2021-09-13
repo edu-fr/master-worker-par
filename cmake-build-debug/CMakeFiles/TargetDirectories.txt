@@ -1,0 +1,4 @@
+/home/eduardo/Documentos/Facul/ProgramacaoConcorrente/Atividades/mestreTrabalhador/cmake-build-debug/CMakeFiles/edit_cache.dir
+/home/eduardo/Documentos/Facul/ProgramacaoConcorrente/Atividades/mestreTrabalhador/cmake-build-debug/CMakeFiles/par_sum.dir
+/home/eduardo/Documentos/Facul/ProgramacaoConcorrente/Atividades/mestreTrabalhador/cmake-build-debug/CMakeFiles/rebuild_cache.dir
+/home/eduardo/Documentos/Facul/ProgramacaoConcorrente/Atividades/mestreTrabalhador/cmake-build-debug/CMakeFiles/sum.dir
