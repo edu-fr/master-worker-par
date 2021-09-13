@@ -17,6 +17,7 @@ do { perror(msg); exit(EXIT_FAILURE); } while (0)
 typedef struct {
     pthread_t thread_id;
     int thread_num;
+    bool idle;
 } thread_info;
 
 typedef struct node node;
@@ -32,19 +33,19 @@ typedef struct {
 } instruction;
 
 /* Global variables */
-int file_size = 0;
+int file_size = 0, idle_workers = 0, num_threads;
 instruction* task_list;
 node *instruction_linked_list, *last_node, *current_node;
-pthread_mutex_t lock_last_node, lock_linked_list, lock_current_node, lock_finished;
-pthread_mutex_t lock_numbers;
-pthread_cond_t cond_current_note;
-bool finished_inserting_on_linked_list = false;
+pthread_mutex_t lock_last_node, lock_linked_list, lock_current_node, lock_done, lock_numbers, lock_idle_workers,
+                lock_work_can_be_started, lock_can_be_awakened;
+pthread_cond_t cond_current_note,  cond_worker_initialized, cond_work_can_be_started, cond_can_be_awakened,
+                cond_worker_got_idle;
+bool done = false, work_can_be_started = false;
 
 long sum = 0;
 long odd = 0;
 long min = INT_MAX;
 long max = INT_MIN;
-bool done = false;
 
 // function prototypes
 void update(long number);
@@ -70,11 +71,28 @@ void update(long number)
         max = number;
     }
     pthread_mutex_unlock(&lock_numbers);
+
+    printf("Terminou de mudar!\n");
 }
 
 static void * threadStartMaster(void *arg) {
     thread_info *t_info = arg;
     // printf("Thread mestre! num %d\n", t_info->thread_num);
+
+    /* Wait for all the workers to be active to create the linked list */
+    pthread_mutex_lock(&lock_idle_workers);
+    while(idle_workers < num_threads - 1) {
+        // printf("Mestre esperando os outros %d trabalhadores serem iniciados!\n", num_threads - idle_workers - 1);
+        pthread_cond_wait(&cond_worker_initialized, &lock_idle_workers);
+    }
+    pthread_mutex_unlock(&lock_idle_workers);
+
+    pthread_mutex_lock(&lock_work_can_be_started);
+    work_can_be_started = true;
+    pthread_mutex_unlock(&lock_work_can_be_started);
+
+    pthread_cond_broadcast(&cond_work_can_be_started); // Ativa todos os trabalhadores (?)
+
     instruction_linked_list = malloc(sizeof(node));
     instruction_linked_list->next = NULL;
     instruction_linked_list->value = -1;
@@ -82,7 +100,7 @@ static void * threadStartMaster(void *arg) {
     
     for (int i = 0; i < file_size; ++i) {
         if(strcmp(task_list[i].instruction_type, "e") == 0) {
-            // printf("Sleeping for %d seconds!\n", task_list[i].value);
+            // printf("Master sleeping for %d seconds!\n", task_list[i].value);
             sleep(task_list[i].value);
             // printf("Waked up!\n");
         } else {
@@ -121,15 +139,36 @@ static void * threadStartMaster(void *arg) {
                 current_node = new_node;
                 pthread_mutex_unlock(&lock_current_node); // UNLOCK current node
 
-                printf("New job available!\n");
+                // printf("New job available!\n");
                 pthread_cond_signal(&cond_current_note);
             }
         }
     }
-    pthread_mutex_lock(&lock_finished);
-    finished_inserting_on_linked_list = true;
-    pthread_mutex_unlock(&lock_finished);
 
+    printf("\n\nTERMINOU DE INSERIR NAS LISTAS!!\n\n");
+
+    pthread_mutex_lock(&lock_idle_workers);
+    while(idle_workers < num_threads - 1) { // If condition is met, end the program
+        // printf("Mestre esperando os outros %d trabalhadores terminarem seus trabalhos!\n", num_threads - idle_workers - 1);
+        pthread_mutex_lock(&lock_current_node);
+        if(current_node != NULL) {
+            pthread_mutex_unlock(&lock_current_node);
+            pthread_cond_signal(&cond_can_be_awakened);
+        }
+        pthread_mutex_unlock(&lock_current_node);
+        pthread_cond_wait(&cond_worker_got_idle, &lock_idle_workers); // Only verifies when a new worker is idle
+    }
+    printf("IDLE WORKERS: %d\n", idle_workers);
+    pthread_mutex_unlock(&lock_idle_workers);
+
+    printf("Fim do programa!\n");
+    printf("Desativando trabalhadores...\n");
+
+    pthread_mutex_lock(&lock_done);
+    done = true;
+    pthread_mutex_unlock(&lock_done);
+    printf("Broadcastei!\n");
+    pthread_cond_broadcast(&cond_can_be_awakened);
     /* Print instruction linked list */
     // int k = 1;
     // node *current_node = instruction_linked_list->next;
@@ -144,36 +183,72 @@ static void * threadStartMaster(void *arg) {
 
 static void * threadStartWorker(void *arg) {
     thread_info *t_info = arg;
+
+    /* Activate a new worker */
+    pthread_mutex_lock(&lock_idle_workers);
+    idle_workers++;
+    pthread_mutex_unlock(&lock_idle_workers);
+    pthread_cond_signal(&cond_worker_initialized);
+
+    /* Wait for the command to start working */
+
+    pthread_mutex_lock(&lock_work_can_be_started);
+    while(!work_can_be_started)
+        pthread_cond_wait(&cond_work_can_be_started, &lock_work_can_be_started);
+    pthread_mutex_unlock(&lock_work_can_be_started);
+
     node* being_worked_node;
-    // printf("Thread trabalhador! num %d\n", t_info->thread_num);
 
-    pthread_mutex_lock(&lock_finished); // LOCK finished
-    pthread_mutex_lock(&lock_current_node);  // LOCK current node
-    while(!finished_inserting_on_linked_list || current_node != NULL) {
-        pthread_mutex_unlock(&lock_finished); // UNLOCK finished
-//        pthread_mutex_unlock(&lock_current_node); // UNLOCK current node
-//
-//        pthread_mutex_lock(&lock_current_node); // LOCK current node
-        while (current_node == NULL) {
-            printf("No tasks for worker %d. Waiting...\n", t_info->thread_num);
-            pthread_cond_wait(&cond_current_note, &lock_current_node); // WAIT current node
+    pthread_mutex_lock(&lock_done);
+    while(!done) {
+        pthread_mutex_unlock(&lock_done);
+
+        pthread_mutex_lock(&lock_idle_workers);
+        idle_workers--;
+        printf("Decrementado! Trabalhador %d está trabalhando! Ainda ociosos: %d\n", t_info->thread_num , idle_workers);
+        pthread_mutex_unlock(&lock_idle_workers);
+
+        pthread_mutex_lock(&lock_current_node);  // LOCK current node
+        do {
+            // pthread_mutex_lock(&lock_current_node); // LOCK current node
+            while (current_node == NULL) {
+                printf("No tasks for worker %d. Waiting...\n", t_info->thread_num);
+                pthread_cond_wait(&cond_current_note, &lock_current_node); // WAIT current node
+            }
+            printf("Worker %d executing task: %d seconds to finish!\n", t_info->thread_num, current_node->value);
+            being_worked_node = current_node;
+            current_node = current_node->next;
+            pthread_mutex_unlock(&lock_current_node); // UNLOCK current node
+            update(being_worked_node->value);
+            pthread_mutex_lock(&lock_current_node); // LOCK current node
+        } while(current_node != NULL);
+        pthread_mutex_unlock(&lock_current_node);
+
+        pthread_mutex_lock(&lock_idle_workers);
+        idle_workers++;
+        pthread_mutex_unlock(&lock_idle_workers);
+
+        pthread_cond_signal(&cond_worker_got_idle);
+
+        pthread_mutex_lock(&lock_current_node);
+        pthread_mutex_lock(&lock_done);
+        while(current_node == NULL && !done) {
+            pthread_mutex_unlock(&lock_done);
+            pthread_cond_wait(&cond_can_be_awakened, &lock_current_node);
         }
-        printf("Worker %d executing task: %d seconds to finish!\n", t_info->thread_num, current_node->value);
-        being_worked_node = current_node;
-        current_node = current_node->next;
-        pthread_mutex_unlock(&lock_current_node); // UNLOCK current node
-        update(being_worked_node->value);
+        pthread_mutex_unlock(&lock_current_node);
+        pthread_mutex_unlock(&lock_done);
 
-        pthread_mutex_lock(&lock_finished); // LOCK finished
-        pthread_mutex_lock(&lock_current_node); // LOCK current node
+        pthread_mutex_lock(&lock_done);
     }
-    pthread_mutex_unlock(&lock_finished); // UNLOCK finished
+
+    printf("Trabalhador %d desativado!\n", t_info->thread_num);
 
     return NULL;
 }
 
 int main(int argc, char *argv[]) {
-    int opt, num_threads, i = 0;
+    int opt, i = 0;
     char *file_name = NULL, buffer[4], *token;
     FILE *file;
     thread_info *t_info;
@@ -251,6 +326,7 @@ int main(int argc, char *argv[]) {
 
     for (int thread_num = 1; thread_num < num_threads; thread_num++) {
         t_info[thread_num].thread_num = thread_num + 1;
+        t_info[thread_num].idle = true;
         s = pthread_create(&t_info[thread_num].thread_id, &attr, &threadStartWorker, &t_info[thread_num]);
         if(s != 0)
             handleErrorNumber(s, "pthread_create_worker");
