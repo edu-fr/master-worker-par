@@ -6,5 +6,5 @@ C_DEFINES =
 
 C_INCLUDES = 
 
-C_FLAGS =  -lpthread -O3 -g -std=gnu99
+C_FLAGS =  -lpthread -O0 -g -std=gnu99
 

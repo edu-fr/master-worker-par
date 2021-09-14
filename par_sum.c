@@ -71,13 +71,10 @@ void update(long number)
         max = number;
     }
     pthread_mutex_unlock(&lock_numbers);
-
-    printf("Terminou de mudar!\n");
 }
 
 static void * threadStartMaster(void *arg) {
     thread_info *t_info = arg;
-    // printf("Thread mestre! num %d\n", t_info->thread_num);
 
     /* Wait for all the workers to be active to create the linked list */
     pthread_mutex_lock(&lock_idle_workers);
@@ -99,10 +96,8 @@ static void * threadStartMaster(void *arg) {
     last_node = instruction_linked_list;
     
     for (int i = 0; i < file_size; ++i) {
-        if(strcmp(task_list[i].instruction_type, "e") == 0) {
-            // printf("Master sleeping for %d seconds!\n", task_list[i].value);
+        if(strcmp(task_list[i].instruction_type, "w") == 0) {
             sleep(task_list[i].value);
-            // printf("Waked up!\n");
         } else {
             if(instruction_linked_list->next != NULL) { // linked list already initialized
                 node *new_node = malloc(sizeof(node));
@@ -145,7 +140,7 @@ static void * threadStartMaster(void *arg) {
         }
     }
 
-    printf("\n\nTERMINOU DE INSERIR NAS LISTAS!!\n\n");
+    printf("\nTERMINOU DE INSERIR NAS LISTAS!!\n");
 
     pthread_mutex_lock(&lock_idle_workers);
     while(idle_workers < num_threads - 1) { // If condition is met, end the program
@@ -158,7 +153,7 @@ static void * threadStartMaster(void *arg) {
         pthread_mutex_unlock(&lock_current_node);
         pthread_cond_wait(&cond_worker_got_idle, &lock_idle_workers); // Only verifies when a new worker is idle
     }
-    printf("IDLE WORKERS: %d\n", idle_workers);
+    printf("\nIDLE WORKERS: %d (DEVERIA SER 7)\n", idle_workers);
     pthread_mutex_unlock(&lock_idle_workers);
 
     printf("Fim do programa!\n");
@@ -169,6 +164,7 @@ static void * threadStartMaster(void *arg) {
     pthread_mutex_unlock(&lock_done);
     printf("Broadcastei!\n");
     pthread_cond_broadcast(&cond_can_be_awakened);
+    printf("OCISOS: %d\n", idle_workers);
     /* Print instruction linked list */
     // int k = 1;
     // node *current_node = instruction_linked_list->next;
@@ -202,6 +198,7 @@ static void * threadStartWorker(void *arg) {
     pthread_mutex_lock(&lock_done);
     while(!done) {
         pthread_mutex_unlock(&lock_done);
+        printf("%d voltou pro done!\n", t_info->thread_num);
 
         pthread_mutex_lock(&lock_idle_workers);
         idle_workers--;
@@ -226,6 +223,7 @@ static void * threadStartWorker(void *arg) {
 
         pthread_mutex_lock(&lock_idle_workers);
         idle_workers++;
+        printf("THREAD %d FICOU OCIOSA! OCIOSOS ATUALMENTE: %d\n", t_info->thread_num, idle_workers);
         pthread_mutex_unlock(&lock_idle_workers);
 
         pthread_cond_signal(&cond_worker_got_idle);
@@ -234,15 +232,18 @@ static void * threadStartWorker(void *arg) {
         pthread_mutex_lock(&lock_done);
         while(current_node == NULL && !done) {
             pthread_mutex_unlock(&lock_done);
+            printf("Thread %d está esperando ser acordada!\n", t_info->thread_num);
             pthread_cond_wait(&cond_can_be_awakened, &lock_current_node);
         }
         pthread_mutex_unlock(&lock_current_node);
         pthread_mutex_unlock(&lock_done);
 
+        printf("\nThread %d foi acordada!\n", t_info->thread_num);
+
         pthread_mutex_lock(&lock_done);
     }
 
-    printf("Trabalhador %d desativado!\n", t_info->thread_num);
+    printf("Trabalhador %d foi encerrado com sucesso!!\n", t_info->thread_num);
 
     return NULL;
 }

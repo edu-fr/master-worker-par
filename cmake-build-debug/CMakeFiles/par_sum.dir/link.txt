@@ -1,1 +1,1 @@
-/usr/bin/cc  -lpthread -O3 -g CMakeFiles/par_sum.dir/par_sum.c.o -o par_sum 
+/usr/bin/cc  -lpthread -O0 -g CMakeFiles/par_sum.dir/par_sum.c.o -o par_sum 

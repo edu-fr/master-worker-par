@@ -1,1 +1,1 @@
-/usr/bin/cc  -lpthread -O3 -g CMakeFiles/sum.dir/sum.c.o -o sum 
+/usr/bin/cc  -lpthread -O0 -g CMakeFiles/sum.dir/sum.c.o -o sum 
