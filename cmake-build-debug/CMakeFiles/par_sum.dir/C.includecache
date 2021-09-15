@@ -19,10 +19,10 @@ string.h
 -
 errno.h
 -
-math.h
--
 stdbool.h
 -
 limits.h
+-
+getopt.h
 -
 

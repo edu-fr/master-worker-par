@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.20)
 project(mestreTrabalhador C)
 
 set(CMAKE_C_STANDARD 99)
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -lpthread -O0")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} --std=c99 -lpthread -O2 -Wall -g")
 
 add_executable(sum sum.c)
 add_executable(par_sum par_sum.c)
